@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>うまい棒 歴代フレーバー判定</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+            background-color: #fefce8; /* Yellow-50 */
+            color: #333;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        .result-mark {
+            font-size: 6rem;
+            font-weight: bold;
+            line-height: 1;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .result-text {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+
+        .mark-o { color: #10b981; } /* Emerald-500 */
+        .mark-x { color: #ef4444; } /* Red-500 */
+        .mark-triangle { color: #f59e0b; } /* Amber-500 */
+
+        /* スマホ向けに入力欄やボタンを大きく */
+        input[type="text"] {
+            font-size: 1.25rem;
+            padding: 1rem;
+        }
+        
+        button {
+            transition: transform 0.1s;
+        }
+        button:active {
+            transform: scale(0.95);
+        }
+
+        /* 履歴リストのスクロール領域 */
+        #historyList {
+            max-height: 30vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+
+    <header class="bg-red-600 text-white p-4 shadow-md text-center">
+        <h1 class="text-xl font-bold">うまい棒 歴代フレーバー判定</h1>
+    </header>
+
+    <main class="flex-grow flex flex-col p-4 w-full max-w-md mx-auto space-y-6">
+        
+        <div class="flex flex-col space-y-3">
+            <input type="text" id="flavorInput" placeholder="味名を入力 (例: コンポタ)" 
+                   class="w-full border-2 border-gray-300 rounded-lg shadow-sm focus:border-red-500 focus:ring focus:ring-red-200 focus:outline-none"
+                   autocomplete="off">
+            <button id="judgeButton" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-lg shadow-md text-xl">
+                判定
+            </button>
+        </div>
+
+        <div id="resultArea" class="hidden flex flex-col items-center justify-center bg-white p-6 rounded-xl shadow-md min-h-[200px]">
+            <div id="resultMark" class="result-mark"></div>
+            <div id="resultLabel" class="result-text mt-2"></div>
+            
+            <div id="resultName" class="mt-4 w-full text-center hidden"></div>
+            
+            <div id="suggestionArea" class="hidden mt-4 w-full text-left">
+                <p class="text-gray-500 text-sm font-bold mb-2">似ている候補：</p>
+                <ul id="suggestionList" class="list-disc pl-5 text-gray-700 space-y-1 font-bold">
+                </ul>
+            </div>
+        </div>
+
+        <div class="mt-auto pt-6 border-t border-red-200">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-lg font-bold text-gray-700">判定履歴</h2>
+                <button id="clearHistoryBtn" class="text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 py-1 px-3 rounded">
+                    履歴クリア
+                </button>
+            </div>
+            <ul id="historyList" class="bg-white rounded-lg shadow-inner p-3 space-y-2 border border-gray-200">
+                <li id="emptyHistory" class="text-gray-400 text-center py-2 text-sm">履歴はありません</li>
+            </ul>
+        </div>
+    </main>
+
+    <script>
+        // ==========================================
+        // 【データ設定エリア】
+        // ==========================================
+        const OFFICIAL_FLAVORS = [
+            // 通常・歴代フレーバー
+            { name: "ソース", series: "うまい棒", fullName: "うまい棒 ソース味" },
+            { name: "サラミ", series: "うまい棒", fullName: "うまい棒 サラミ味" },
+            { name: "カレー", series: "うまい棒", fullName: "うまい棒 カレー味" },
+            { name: "チーズ", series: "うまい棒", fullName: "うまい棒 チーズ味" },
+            { name: "バーガー", series: "うまい棒", fullName: "うまい棒 バーガー味" },
+            { name: "やさいサラダ", series: "うまい棒", fullName: "うまい棒 やさいサラダ味" },
+            { name: "めんたい", series: "うまい棒", fullName: "うまい棒 めんたい味" },
+            { name: "キャラメル", series: "うまい棒", fullName: "うまい棒 キャラメル味" },
+            { name: "かにシューマイ", series: "うまい棒", fullName: "うまい棒 かにシューマイ味" },
+            { name: "ギョ！The", series: "うまい棒", fullName: "うまい棒 ギョ！The味（餃子味）" },
+            { name: "ピザ", series: "うまい棒", fullName: "うまい棒 ピザ味" },
+            { name: "マリンビーフ", series: "うまい棒", fullName: "うまい棒 マリンビーフ味" },
+            { name: "アメリカンホットドッグ", series: "うまい棒", fullName: "うまい棒 アメリカンホットドッグ味" },
+            { name: "たこ焼", series: "うまい棒", fullName: "うまい棒 たこ焼味" },
+            { name: "チョコピー", series: "うまい棒", fullName: "うまい棒 チョコピー味" },
+            { name: "ロブスター", series: "うまい棒", fullName: "うまい棒 ロブスター味" },
+            { name: "オムライス", series: "うまい棒", fullName: "うまい棒 オムライス味" },
+            { name: "カニチャンコ", series: "うまい棒", fullName: "うまい棒 カニチャンコ味" },
+            { name: "梅おにぎり", series: "うまい棒", fullName: "うまい棒 梅おにぎり味" },
+            { name: "豆リカン", series: "うまい棒", fullName: "うまい棒 豆リカン味" },
+            { name: "なっとう", series: "うまい棒", fullName: "うまい棒 なっとう味" },
+            { name: "コーンポタージュ", series: "うまい棒", fullName: "うまい棒 コーンポタージュ味" },
+            { name: "とんかつソース", series: "うまい棒", fullName: "うまい棒 とんかつソース味" },
+            { name: "ちょい辛パンチ", series: "うまい棒", fullName: "うまい棒 ちょい辛パンチ味" },
+            { name: "テリヤキバーガー", series: "うまい棒", fullName: "うまい棒 テリヤキバーガー味" },
+            { name: "ココア", series: "うまい棒", fullName: "うまい棒 ココア味" },
+            { name: "チキンカレー", series: "うまい棒", fullName: "うまい棒 チキンカレー味" },
+            { name: "さきいか", series: "うまい棒", fullName: "うまい棒 さきいか味" },
+            { name: "かばやき", series: "うまい棒", fullName: "うまい棒 かばやき味" },
+            { name: "エビマヨネーズ", series: "うまい棒", fullName: "うまい棒 エビマヨネーズ味" },
+            { name: "オニオンサラダ", series: "うまい棒", fullName: "うまい棒 オニオンサラダ味" },
+            { name: "ぶたキムチ", series: "うまい棒", fullName: "うまい棒 ぶたキムチ味" },
+            { name: "マーボー", series: "うまい棒", fullName: "うまい棒 マーボー味" },
+            { name: "牛タン塩", series: "うまい棒", fullName: "うまい棒 牛タン塩味" },
+            { name: "黒糖", series: "うまい棒", fullName: "うまい棒 黒糖味" },
+            { name: "シュガーラスク", series: "うまい棒", fullName: "うまい棒 シュガーラスク味" },
+            { name: "やきとり", series: "うまい棒", fullName: "うまい棒 やきとり味" },
+            { name: "のり塩", series: "うまい棒", fullName: "うまい棒 のり塩味" },
+            { name: "チョコレート", series: "うまい棒", fullName: "うまい棒 チョコレート味" },
+
+            // プレミアム系
+            { name: "モッツァレラチーズ＆カマンベールチーズ", series: "プレミアムうまい棒", fullName: "プレミアムうまい棒 モッツァレラチーズ＆カマンベールチーズ味" },
+            { name: "プレミアム明太子", series: "プレミアムうまい棒", fullName: "プレミアムうまい棒 明太子味" },
+            { name: "和風ステーキ", series: "プレミアムうまい棒", fullName: "プレミアムうまい棒 和風ステーキ味" },
+            { name: "わさびソースの和風ステーキ", series: "プレミアムうまい棒", fullName: "プレミアムうまい棒 わさびソースの和風ステーキ味" },
+
+            // 限定・地域限定・企画系
+            { name: "かぼちゃコーンポタージュ", series: "限定", fullName: "限定うまい棒 かぼちゃコーンポタージュ味" },
+            { name: "ちまき", series: "限定", fullName: "限定うまい棒 ちまき味" },
+            { name: "レモンスカッシュ", series: "限定", fullName: "限定うまい棒 レモンスカッシュ味" },
+            { name: "シナモンアップルパイ", series: "限定", fullName: "限定うまい棒 シナモンアップルパイ味" },
+            { name: "レモン", series: "限定", fullName: "限定うまい棒 レモン味" },
+            { name: "ドラゴン", series: "限定", fullName: "限定うまい棒 ドラゴン味" },
+            { name: "ドラゴンビスク", series: "限定", fullName: "限定うまい棒 ドラゴンビスク味" }
+        ];
+
+        // ==========================================
+        // 【エイリアス（別名）設定エリア】
+        // ==========================================
+        const ALIASES = {
+            "コンポタ": "コーンポタージュ",
+            "サラダ": "やさいサラダ",
+            "野菜サラダ": "やさいサラダ",
+            "明太子": "めんたい", // プレミアム版があるため類似候補と完全一致で捌く
+            "チョコ": "チョコレート",
+            "たこ焼き": "たこ焼",
+            "豚キムチ": "ぶたキムチ",
+            "エビマヨ": "エビマヨネーズ",
+            "マヨネーズ": "エビマヨネーズ",
+            "餃子": "ギョ！The",
+            "アメリカンドッグ": "アメリカンホットドッグ",
+            "牛タン": "牛タン塩",
+            "納豆": "なっとう"
+        };
+
+        // ==========================================
+        // 【アプリケーションロジック】
+        // ==========================================
+        const inputEl = document.getElementById('flavorInput');
+        const judgeBtn = document.getElementById('judgeButton');
+        const resultArea = document.getElementById('resultArea');
+        const resultMarkEl = document.getElementById('resultMark');
+        const resultLabelEl = document.getElementById('resultLabel');
+        const resultNameEl = document.getElementById('resultName');
+        const suggestionArea = document.getElementById('suggestionArea');
+        const suggestionList = document.getElementById('suggestionList');
+        const historyListEl = document.getElementById('historyList');
+        const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+        const emptyHistoryEl = document.getElementById('emptyHistory');
+
+        let historyData = [];
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadHistory();
+            inputEl.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    judgeFlavor();
+                    inputEl.blur(); 
+                }
+            });
+            judgeBtn.addEventListener('click', judgeFlavor);
+            clearHistoryBtn.addEventListener('click', clearHistory);
+        });
+
+        function normalizeString(str) {
+            if (!str) return "";
+            let normalized = str;
+            // 全角英数字を半角に
+            normalized = normalized.replace(/[Ａ-Ｚａ-ｚ０-９！-～]/g, function(s) {
+                return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
+            });
+            // ひらがなをカタカナに
+            normalized = normalized.replace(/[\u3041-\u3096]/g, function(match) {
+                const chr = match.charCodeAt(0) + 0x60;
+                return String.fromCharCode(chr);
+            });
+            normalized = normalized.toLowerCase();
+            normalized = normalized.replace(/[\s　]+/g, ''); // 空白除去
+            normalized = normalized.replace(/(味|あじ|アジ)$/, ''); // 末尾の「味」を除去
+            normalized = normalized.replace(/[・＝=！!＆&（）()]/g, ''); // 記号類を無視
+            return normalized;
+        }
+
+        function levenshteinDistance(s1, s2) {
+            if (s1.length === 0) return s2.length;
+            if (s2.length === 0) return s1.length;
+            const matrix = [];
+            for (let i = 0; i <= s2.length; i++) matrix[i] = [i];
+            for (let j = 0; j <= s1.length; j++) matrix[0][j] = j;
+            for (let i = 1; i <= s2.length; i++) {
+                for (let j = 1; j <= s1.length; j++) {
+                    if (s2.charAt(i - 1) === s1.charAt(j - 1)) {
+                        matrix[i][j] = matrix[i - 1][j - 1];
+                    } else {
+                        matrix[i][j] = Math.min(
+                            matrix[i - 1][j - 1] + 1,
+                            Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1)
+                        );
+                    }
+                }
+            }
+            return matrix[s2.length][s1.length];
+        }
+
+        function judgeFlavor() {
+            const rawInput = inputEl.value;
+            let targetInput = normalizeString(rawInput);
+
+            if (!targetInput) {
+                alert("味名を入力してください"); 
+                return;
+            }
+
+            let resultType = 'none'; 
+            let exactMatchItems = [];
+            let similarFlavors = [];
+
+            // 1. エイリアス辞書の正規化と適用
+            const normalizedAliases = {};
+            for (const key in ALIASES) {
+                normalizedAliases[normalizeString(key)] = ALIASES[key];
+            }
+
+            // 「味」を抜いた状態でエイリアス判定
+            let resolvedName = ALIASES[rawInput.replace(/(味|あじ|アジ)$/, '').replace(/[\s　]+/g, '')] 
+                            || normalizedAliases[targetInput] 
+                            || targetInput;
+
+            const searchTarget = normalizeString(resolvedName);
+
+            // 2. 公式データリストの正規化
+            const normalizedOfficialList = OFFICIAL_FLAVORS.map(flavor => ({
+                original: flavor,
+                normalizedName: normalizeString(flavor.name),
+                normalizedFullName: normalizeString(flavor.fullName)
+            }));
+
+            // 3. 完全一致の検索
+            exactMatchItems = normalizedOfficialList.filter(item => {
+                const isPremium = item.original.series.includes("プレミアム");
+                const premiumPrefixMatch = (isPremium && normalizeString("プレミアム" + item.original.name) === searchTarget);
+                
+                return item.normalizedName === searchTarget || 
+                       item.normalizedFullName === searchTarget ||
+                       normalizeString("うまい棒" + item.original.name) === searchTarget ||
+                       premiumPrefixMatch;
+            });
+
+            if (exactMatchItems.length > 0) {
+                resultType = 'exact';
+            } else {
+                // 4. 部分一致と類似検索
+                let distanceCandidates = [];
+
+                normalizedOfficialList.forEach(item => {
+                    // ① 明確な部分一致を優先 (文字数が短い場合は暴発を防ぐため3文字以上で判定)
+                    let isPartialMatch = false;
+                    if (searchTarget.length >= 3) {
+                        if (item.normalizedFullName.includes(searchTarget) || searchTarget.includes(item.normalizedName)) {
+                            isPartialMatch = true;
+                        }
+                    }
+
+                    // ② 編集距離と類似度の計算
+                    const dist = levenshteinDistance(searchTarget, item.normalizedName);
+                    const maxLen = Math.max(searchTarget.length, item.normalizedName.length);
+                    const sim = maxLen === 0 ? 1.0 : 1.0 - (dist / maxLen);
+
+                    let isSimilar = false;
+                    if (searchTarget.length <= 3) {
+                        if (dist <= 1) isSimilar = true; // 短い入力は編集距離1以内のみ
+                    } else {
+                        if (sim >= 0.7) isSimilar = true; // 長い入力は類似度0.7以上
+                    }
+
+                    if (isPartialMatch || isSimilar) {
+                        distanceCandidates.push({ 
+                            ...item, 
+                            distance: dist, 
+                            similarity: sim,
+                            isPartialMatch: isPartialMatch 
+                        });
+                    }
+                });
+
+                // 部分一致を最優先し、次に類似度が高い順にソート
+                distanceCandidates.sort((a, b) => {
+                    if (a.isPartialMatch && !b.isPartialMatch) return -1;
+                    if (!a.isPartialMatch && b.isPartialMatch) return 1;
+                    return b.similarity - a.similarity || a.distance - b.distance;
+                });
+
+                // 重複排除して最大3件を取得
+                const uniqueCandidatesMap = new Map();
+                distanceCandidates.forEach(item => {
+                    if (!uniqueCandidatesMap.has(item.original.fullName)) {
+                        uniqueCandidatesMap.set(item.original.fullName, item.original);
+                    }
+                });
+
+                similarFlavors = Array.from(uniqueCandidatesMap.values()).slice(0, 3); 
+
+                if (similarFlavors.length > 0) {
+                    resultType = 'similar';
+                }
+            }
+
+            // --- UIの更新 ---
+            showResult(rawInput, resultType, exactMatchItems, similarFlavors);
+            addHistory(rawInput, resultType, exactMatchItems);
+            
+            inputEl.value = '';
+            inputEl.focus();
+        }
+
+        function showResult(inputName, type, exactMatchItems, similarFlavors) {
+            resultArea.classList.remove('hidden');
+            suggestionArea.classList.add('hidden');
+            suggestionList.innerHTML = '';
+            resultNameEl.innerHTML = ''; 
+            resultNameEl.classList.remove('hidden');
+            resultMarkEl.className = 'result-mark'; 
+            
+            if (type === 'exact') {
+                resultMarkEl.textContent = '○';
+                resultMarkEl.classList.add('mark-o');
+                resultLabelEl.textContent = 'あり';
+                
+                // 該当商品（複数対応）の表示
+                if (exactMatchItems.length === 1) {
+                    resultNameEl.innerHTML = `<span class="text-sm font-normal text-gray-500">正式名称：</span><br><span class="text-xl font-bold text-gray-800">${exactMatchItems[0].original.fullName}</span>`;
+                } else {
+                    let html = `<span class="text-sm font-normal text-gray-500">該当商品：</span><ul class="text-lg font-bold list-none mt-2 text-center inline-block space-y-1">`;
+                    exactMatchItems.forEach(item => {
+                        html += `<li class="text-gray-800">${item.original.fullName}</li>`;
+                    });
+                    html += `</ul>`;
+                    resultNameEl.innerHTML = html;
+                }
+                
+            } else if (type === 'similar') {
+                resultMarkEl.textContent = '△';
+                resultMarkEl.classList.add('mark-triangle');
+                resultLabelEl.textContent = '審議';
+                resultNameEl.classList.add('hidden');
+                
+                suggestionArea.classList.remove('hidden');
+                similarFlavors.forEach(flavor => {
+                    const li = document.createElement('li');
+                    li.textContent = flavor.fullName;
+                    suggestionList.appendChild(li);
+                });
+            } else {
+                resultMarkEl.textContent = '×';
+                resultMarkEl.classList.add('mark-x');
+                resultLabelEl.textContent = 'なし';
+                resultNameEl.classList.add('hidden');
+            }
+        }
+
+        function addHistory(flavorName, type, exactMatchItems) {
+            let mark = '';
+            let markClass = '';
+            let matchedText = '';
+
+            if (type === 'exact') {
+                mark = '○';
+                markClass = 'text-emerald-500 font-bold';
+                
+                if (exactMatchItems.length === 1) {
+                    matchedText = `正式：${exactMatchItems[0].original.fullName}`;
+                } else if (exactMatchItems.length > 1) {
+                    matchedText = `該当 ${exactMatchItems.length}件`;
+                }
+            } else if (type === 'similar') {
+                mark = '△';
+                markClass = 'text-amber-500 font-bold';
+            } else {
+                mark = '×';
+                markClass = 'text-red-500 font-bold';
+            }
+
+            const historyItem = {
+                name: flavorName,
+                matchedText: matchedText, 
+                mark: mark,
+                markClass: markClass,
+                timestamp: Date.now()
+            };
+
+            historyData.unshift(historyItem);
+            if (historyData.length > 50) historyData.pop();
+
+            saveHistory();
+            renderHistory();
+        }
+
+        function renderHistory() {
+            historyListEl.innerHTML = '';
+            
+            if (historyData.length === 0) {
+                historyListEl.appendChild(emptyHistoryEl);
+                emptyHistoryEl.style.display = 'block';
+                return;
+            }
+
+            historyData.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'flex justify-between items-center py-2 border-b border-gray-100 last:border-0';
+                
+                const nameContainer = document.createElement('div');
+                nameContainer.className = 'flex flex-col pr-4';
+
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'text-gray-800 text-lg break-all font-bold';
+                nameSpan.textContent = item.name;
+                nameContainer.appendChild(nameSpan);
+
+                if (item.matchedText) {
+                    const matchedSpan = document.createElement('span');
+                    matchedSpan.className = 'text-xs text-blue-600 mt-1';
+                    matchedSpan.textContent = item.matchedText;
+                    nameContainer.appendChild(matchedSpan);
+                }
+
+                const markSpan = document.createElement('span');
+                markSpan.className = `text-2xl ${item.markClass}`;
+                markSpan.textContent = item.mark;
+
+                li.appendChild(nameContainer);
+                li.appendChild(markSpan);
+                historyListEl.appendChild(li);
+            });
+        }
+
+        function clearHistory() {
+            historyData = [];
+            saveHistory();
+            renderHistory();
+            resultArea.classList.add('hidden');
+        }
+
+        function saveHistory() {
+            try {
+                localStorage.setItem('umaibo_history', JSON.stringify(historyData));
+            } catch (e) {
+                console.warn('ローカルストレージへの保存に失敗しました', e);
+            }
+        }
+
+        function loadHistory() {
+            try {
+                const saved = localStorage.getItem('umaibo_history');
+                if (saved) {
+                    historyData = JSON.parse(saved);
+                    renderHistory();
+                }
+            } catch (e) {
+                console.warn('履歴の読み込みに失敗しました', e);
+            }
+        }
+    </script>
+</body>
+</html>
